@@ -1,5 +1,6 @@
 import * as DirectLineExport from "./directLine";
-import { TestScheduler, Observable } from "rxjs";
+import { Observable } from "rxjs";
+import { TestScheduler } from "rxjs/testing"
 import { AjaxCreationMethod, AjaxRequest, AjaxResponse } from "rxjs/observable/dom/AjaxObservable";
 import { URL, URLSearchParams } from 'url';
 

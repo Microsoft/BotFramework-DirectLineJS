@@ -29,9 +29,9 @@ import 'rxjs/add/observable/from';
 import 'rxjs/add/observable/interval';
 import 'rxjs/add/observable/of';
 import 'rxjs/add/observable/throw';
+import 'rxjs/add/observable/timer';
 
 import dedupeFilenames from './dedupeFilenames';
-import { objectExpression } from '@babel/types';
 
 import { DirectLineStreaming } from './directLineStreaming';
 export { DirectLineStreaming };
@@ -894,7 +894,7 @@ export class DirectLine implements IBotConnection {
 
         return this.checkConnection()
         .flatMap(_ => poller$
-            .catch(() => Observable.empty<AjaxResponse>())
+            .catch(() => Observable.empty())
             .map(ajaxResponse => ajaxResponse.response as ActivityGroup)
             .flatMap(activityGroup => this.observableFromActivityGroup(activityGroup)));
     }

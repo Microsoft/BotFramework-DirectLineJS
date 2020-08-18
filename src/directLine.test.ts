@@ -1,6 +1,11 @@
 import * as DirectLineExport from "./directLine";
 import * as DirectLineMock from './directLine.mock';
-import { TestScheduler, Observable, Subscription, AjaxResponse } from "rxjs";
+import { Observable, Subscription } from "rxjs";
+import { TestScheduler } from "rxjs/testing";
+import { AjaxResponse } from "rxjs/ajax"
+
+import 'rxjs/add/operator/observeOn';
+
 // @ts-ignore
 import { version } from "../package.json";
 
@@ -228,14 +233,12 @@ describe('MockSuite', () => {
         };
 
         let actualError: Error;
-        try{
-        subscriptions.push(lazyConcat(scenario()).observeOn(scheduler).subscribe());
-        scheduler.flush();
-        }
-        catch(error){
+        subscriptions.push(lazyConcat(scenario()).observeOn(scheduler).catch((error, observable) => {
             actualError = error;
             endTime = scheduler.now();
-        }
+            return observable;
+        }).subscribe());
+        scheduler.flush();
         expect(actualError.message).toStrictEqual('Ajax Error');
         // @ts-ignore
         expect(actualError.status).toStrictEqual(429);
