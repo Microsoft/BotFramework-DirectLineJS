@@ -2,37 +2,18 @@
 
 import 'core-js/features/promise';
 import 'url-search-params-polyfill';
-import { AjaxResponse, AjaxCreationMethod, AjaxRequest, AjaxError } from 'rxjs/observable/dom/AjaxObservable';
-import { BehaviorSubject } from 'rxjs/BehaviorSubject';
-import { Observable } from 'rxjs/Observable';
-import { IScheduler } from 'rxjs/Scheduler';
-import { Subscriber } from 'rxjs/Subscriber';
-import { Subscription } from 'rxjs/Subscription';
-import { async as AsyncScheduler } from 'rxjs/scheduler/async';
+import { throwError, BehaviorSubject, Observable, Subscriber, Subscription, interval, timer, SchedulerLike, scheduled, EMPTY, asyncScheduler } from 'rxjs';
+import { Activity, DirectLineOptions, Conversation, Message, Media, ActivityGroup, IBotConnection } from './directLine';
+import { mergeMap, filter, take, map, retryWhen, delay, catchError, tap, count, share } from 'rxjs/operators';
+import { ajax, AjaxResponse } from 'rxjs/ajax';
+import { ConnectionStatus } from './directline.enum';
+import dedupeFilenames from './dedupeFilenames';
+import { AjaxCreationMethod, AjaxRequest } from 'rxjs/internal/observable/dom/AjaxObservable';
+import { Services } from './directline.interface';
 import jwtDecode, { JwtPayload, InvalidTokenError } from 'jwt-decode';
 
-import 'rxjs/add/operator/catch';
-import 'rxjs/add/operator/combineLatest';
-import 'rxjs/add/operator/count';
-import 'rxjs/add/operator/delay';
-import 'rxjs/add/operator/do';
-import 'rxjs/add/operator/filter';
-import 'rxjs/add/operator/map';
-import 'rxjs/add/operator/mergeMap';
-import 'rxjs/add/operator/concatMap';
-import 'rxjs/add/operator/retryWhen';
-import 'rxjs/add/operator/share';
-import 'rxjs/add/operator/take';
-
-import 'rxjs/add/observable/dom/ajax';
-import 'rxjs/add/observable/empty';
-import 'rxjs/add/observable/from';
-import 'rxjs/add/observable/interval';
-import 'rxjs/add/observable/of';
-import 'rxjs/add/observable/throw';
-
-import dedupeFilenames from './dedupeFilenames';
-import { objectExpression } from '@babel/types';
+export * from './directline.interface';
+export * from './directline.enum';
 
 import { DirectLineStreaming } from './directLineStreaming';
 export { DirectLineStreaming };
@@ -50,359 +31,31 @@ declare var process: {
     version: string;
 };
 
-// Direct Line 3.0 types
-
-export interface Conversation {
-    conversationId: string,
-    token: string,
-    eTag?: string,
-    streamUrl?: string,
-    referenceGrammarId?: string
-}
-
-export type MediaType = "image/png" | "image/jpg" | "image/jpeg" | "image/gif" | "image/svg+xml" | "audio/mpeg" | "audio/mp4" | "video/mp4";
-
-export interface Media {
-    contentType: MediaType,
-    contentUrl: string,
-    name?: string,
-    thumbnailUrl?: string
-}
-
-export interface UnknownMedia{
-    contentType: string,
-    contentUrl: string,
-    name?: string,
-    thumbnailUrl?: string
-}
-
-export type CardActionTypes = "call" | "downloadFile"| "imBack" | "messageBack" | "openUrl" | "playAudio" | "playVideo" | "postBack" | "signin" | "showImage";
-
-export type CardAction = CallCardAction | DownloadFileCardAction | IMBackCardAction | MessageBackCardAction | OpenURLCardAction | PlayAudioCardAction | PlayVideoCardAction | PostBackCardAction | SignInCardAction | ShowImageCardAction;
-
-export interface CallCardAction {
-    image?: string,
-    title: string,
-    type: "call",
-    value: any
-}
-
-export interface DownloadFileCardAction {
-    image?: string,
-    title: string,
-    type: "downloadFile",
-    value: any
-}
-
-export interface IMBackCardAction {
-    image?: string,
-    title?: string,
-    type: "imBack",
-    value: string
-}
-
-export type MessageBackCardAction = MessageBackWithImage | MessageBackWithTitle
-
-export interface MessageBackWithImage {
-    displayText?: string,
-    image: string,
-    text?: string,
-    title?: string,
-    type: "messageBack",
-    value?: any
-}
-
-export interface MessageBackWithTitle {
-    displayText?: string,
-    image?: string,
-    text?: string,
-    title: string,
-    type: "messageBack",
-    value?: any
-}
-
-export interface OpenURLCardAction {
-    image?: string,
-    title: string,
-    type: "openUrl",
-    value: any
-}
-
-export interface PlayAudioCardAction {
-    image?: string,
-    title: string,
-    type: "playAudio",
-    value: any
-}
-
-export interface PlayVideoCardAction {
-    image?: string,
-    title: string,
-    type: "playVideo",
-    value: any
-}
-
-export interface PostBackCardAction {
-    image?: string,
-    title?: string,
-    type: "postBack",
-    value: any
-}
-
-export interface ShowImageCardAction {
-    image?: string,
-    title: string,
-    type: "showImage",
-    value: any
-}
-
-export interface SignInCardAction {
-    image?: string,
-    title: string,
-    type: "signin",
-    value: any
-}
-
-export interface CardImage {
-    alt?: string,
-    url: string,
-    tap?: CardAction
-}
-
-export interface HeroCard {
-    contentType: "application/vnd.microsoft.card.hero",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        images?: CardImage[],
-        buttons?: CardAction[],
-        tap?: CardAction
-    }
-}
-
-export interface Thumbnail {
-    contentType: "application/vnd.microsoft.card.thumbnail",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        images?: CardImage[],
-        buttons?: CardAction[],
-        tap?: CardAction
-    }
-}
-
-export interface Signin {
-    contentType: "application/vnd.microsoft.card.signin",
-    content: {
-        text?: string,
-        buttons?: CardAction[]
-    }
-}
-
-export interface OAuth {
-    contentType: "application/vnd.microsoft.card.oauth",
-    content: {
-        text?: string,
-        connectionname: string,
-        buttons?: CardAction[]
-    }
-}
-
-export interface ReceiptItem {
-    title?: string,
-    subtitle?: string,
-    text?: string,
-    image?: CardImage,
-    price?: string,
-    quantity?: string,
-    tap?: CardAction
-}
-
-export interface Receipt {
-    contentType: "application/vnd.microsoft.card.receipt",
-    content: {
-        title?: string,
-        facts?: { key: string, value: string }[],
-        items?: ReceiptItem[],
-        tap?: CardAction,
-        tax?: string,
-        vat?: string,
-        total?: string,
-        buttons?: CardAction[]
-    }
-}
-
-// Deprecated format for Skype channels. For testing legacy bots in Emulator only.
-export interface FlexCard {
-    contentType: "application/vnd.microsoft.card.flex",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        images?: CardImage[],
-        buttons?: CardAction[],
-        aspect?: string
-    }
-}
-
-export interface AudioCard {
-    contentType: "application/vnd.microsoft.card.audio",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        media?: { url: string, profile?: string }[],
-        buttons?: CardAction[],
-        autoloop?: boolean,
-        autostart?: boolean
-    }
-}
-
-export interface VideoCard {
-    contentType: "application/vnd.microsoft.card.video",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        media?: { url: string, profile?: string }[],
-        buttons?: CardAction[],
-        image?: { url: string, alt?: string },
-        autoloop?: boolean,
-        autostart?: boolean
-    }
-}
-
-export interface AdaptiveCard {
-    contentType: "application/vnd.microsoft.card.adaptive",
-    content: any;
-}
-
-export interface AnimationCard {
-    contentType: "application/vnd.microsoft.card.animation",
-    content: {
-        title?: string,
-        subtitle?: string,
-        text?: string,
-        media?: { url: string, profile?: string }[],
-        buttons?: CardAction[],
-        image?: { url: string, alt?: string },
-        autoloop?: boolean,
-        autostart?: boolean
-    }
-}
-
-export type KnownMedia = Media | HeroCard | Thumbnail | Signin | OAuth | Receipt | AudioCard | VideoCard | AnimationCard | FlexCard | AdaptiveCard;
-export type Attachment = KnownMedia | UnknownMedia;
-
-export type UserRole = "bot" | "channel" | "user";
-
-export interface User {
-    id: string,
-    name?: string,
-    iconUrl?: string,
-    role?: UserRole
-}
-
-export interface IActivity {
-    type: string,
-    channelData?: any,
-    channelId?: string,
-    conversation?: { id: string },
-    eTag?: string,
-    from: User,
-    id?: string,
-    timestamp?: string
-}
-
-export type AttachmentLayout = "list" | "carousel";
-
-export interface Message extends IActivity {
-    type: "message",
-    text?: string,
-    locale?: string,
-    textFormat?: "plain" | "markdown" | "xml",
-    attachmentLayout?: AttachmentLayout,
-    attachments?: Attachment[],
-    entities?: any[],
-    suggestedActions?: { actions: CardAction[], to?: string[] },
-    speak?: string,
-    inputHint?: string,
-    value?: object
-}
-
-export interface Typing extends IActivity {
-    type: "typing"
-}
-
-export interface EventActivity extends IActivity {
-    type: "event",
-    name: string,
-    value: any
-}
-
-export type Activity = Message | Typing | EventActivity;
-
-export interface ActivityGroup {
-    activities: Activity[],
-    watermark: string
-}
-
-// These types are specific to this client library, not to Direct Line 3.0
-
-export enum ConnectionStatus {
-    Uninitialized,              // the status when the DirectLine object is first created/constructed
-    Connecting,                 // currently trying to connect to the conversation
-    Online,                     // successfully connected to the conversation. Connection is healthy so far as we know.
-    ExpiredToken,               // last operation errored out with an expired token. Possibly waiting for someone to supply a new one.
-    FailedToConnect,            // the initial attempt to connect to the conversation failed. No recovery possible.
-    Ended                       // the bot ended the conversation
-}
-
-export interface DirectLineOptions {
-    secret?: string,
-    token?: string,
-    conversationId?: string,
-    watermark?: string,
-    domain?: string,
-    webSocket?: boolean,
-    pollingInterval?: number,
-    streamUrl?: string,
-    timeout?: number,
-    // Attached to all requests to identify requesting agent.
-    botAgent?: string,
-    conversationStartProperties?: any
-}
-
-export interface Services {
-    scheduler: IScheduler;
-    WebSocket: typeof WebSocket;
-    ajax: AjaxCreationMethod;
-    random: () => number;
-}
-
-const wrapAjaxWithRetry = (source: AjaxCreationMethod, scheduler: IScheduler): AjaxCreationMethod =>{
+const wrapAjaxWithRetry = (source: AjaxCreationMethod, scheduler: SchedulerLike): AjaxCreationMethod => {
 
     const notImplemented = (): never => { throw new Error('not implemented'); };
 
-    const inner = (response$ : Observable<AjaxResponse>) => {
+    const inner = (response$: Observable<AjaxResponse>) => {
         return response$
-        .catch<AjaxResponse, AjaxResponse>((err) => {
-            if(err.status === 429){
-                const retryAfterValue = err.xhr.getResponseHeader('Retry-After');
-                const retryAfter = Number(retryAfterValue);
-                if(!isNaN(retryAfter)){
-                    return Observable.timer(retryAfter, scheduler)
-                    .flatMap(_ => Observable.throw(err, scheduler));
-                }
-            }
+            .pipe(
+                catchError(err => {
+                    if (err.status === 429) {
+                        const retryAfterValue = err.xhr.getResponseHeader('Retry-After');
+                        const retryAfter = Number(retryAfterValue);
+                        if (!isNaN(retryAfter)) {
+                            return timer(retryAfter, scheduler)
+                                .pipe(
+                                    mergeMap(_ => throwError(err, scheduler))
+                                );
+                        }
+                    }
 
-            return Observable.throw(err, scheduler);
-        });
+                    return throwError(err, scheduler);
+                })
+            );
     };
 
-    const outer = (urlOrRequest: string| AjaxRequest) => {
+    const outer = (urlOrRequest: string | AjaxRequest) => {
         return inner(source(urlOrRequest));
     };
 
@@ -417,10 +70,10 @@ const wrapAjaxWithRetry = (source: AjaxCreationMethod, scheduler: IScheduler): A
 }
 
 const makeServices = (services: Partial<Services>): Services => {
-    const scheduler = services.scheduler || AsyncScheduler;
+    const scheduler = services.scheduler || asyncScheduler;
     return {
         scheduler,
-        ajax: wrapAjaxWithRetry(services.ajax || Observable.ajax, scheduler),
+        ajax: wrapAjaxWithRetry(services.ajax || ajax, scheduler),
         WebSocket: services.WebSocket || WebSocket,
         random: services.random || Math.random,
     }
@@ -429,7 +82,7 @@ const makeServices = (services: Partial<Services>): Services => {
 const lifetimeRefreshToken = 30 * 60 * 1000;
 const intervalRefreshToken = lifetimeRefreshToken / 2;
 
-const POLLING_INTERVAL_LOWER_BOUND: number = 200; //ms
+const POLLING_INTERVAL_LOWER_BOUND: number = 200; // ms
 
 const errorExpiredToken = new Error("expired token");
 const errorConversationEnded = new Error("conversation ended");
@@ -442,15 +95,6 @@ const konsole = {
     }
 }
 
-export interface IBotConnection {
-    connectionStatus$: BehaviorSubject<ConnectionStatus>,
-    activity$: Observable<Activity>,
-    end(): void,
-    referenceGrammarId?: string,
-    postActivity(activity: Activity): Observable<string>,
-    getSessionId? : () => Observable<string>
-}
-
 export class DirectLine implements IBotConnection {
     public connectionStatus$ = new BehaviorSubject(ConnectionStatus.Uninitialized);
     public activity$: Observable<Activity>;
@@ -458,7 +102,7 @@ export class DirectLine implements IBotConnection {
     private domain = "https://directline.botframework.com/v3/directline";
     private webSocket: boolean;
 
-    private conversationId: string;
+    public conversationId: string;
     private expiredTokenExhaustion: Function;
     private secret: string;
     private token: string;
@@ -474,7 +118,7 @@ export class DirectLine implements IBotConnection {
     private localeOnStartConversation: string;
     private userIdOnStartConversation: string;
 
-    private pollingInterval: number = 1000; //ms
+    private pollingInterval: number = 1000; // ms
 
     private tokenRefreshSubscription: Subscription;
 
@@ -521,7 +165,7 @@ export class DirectLine implements IBotConnection {
 
         this.services = makeServices(options);
 
-        const parsedPollingInterval = ~~options.pollingInterval;
+        const parsedPollingInterval = options.pollingInterval || 0;
 
         if (parsedPollingInterval < POLLING_INTERVAL_LOWER_BOUND) {
             if (typeof options.pollingInterval !== 'undefined') {
@@ -540,59 +184,68 @@ export class DirectLine implements IBotConnection {
         this.activity$ = (this.webSocket
             ? this.webSocketActivity$()
             : this.pollingGetActivity$()
-        ).share();
+        )
+        .pipe(
+            share()
+        );
     }
 
     // Every time we're about to make a Direct Line REST call, we call this first to see check the current connection status.
     // Either throws an error (indicating an error state) or emits a null, indicating a (presumably) healthy connection
     private checkConnection(once = false) {
         let obs =  this.connectionStatus$
-        .flatMap(connectionStatus => {
-            if (connectionStatus === ConnectionStatus.Uninitialized) {
-                this.connectionStatus$.next(ConnectionStatus.Connecting);
+            .pipe(
+                mergeMap(connectionStatus => {
+                    if (connectionStatus === ConnectionStatus.Uninitialized) {
+                        this.connectionStatus$.next(ConnectionStatus.Connecting);
 
-                //if token and streamUrl are defined it means reconnect has already been done. Skipping it.
-                if (this.token && this.streamUrl) {
-                    this.connectionStatus$.next(ConnectionStatus.Online);
-                    return Observable.of(connectionStatus, this.services.scheduler);
-                } else {
-                    return this.startConversation().do(conversation => {
-                        this.conversationId = conversation.conversationId;
-                        this.token = this.secret || conversation.token;
-                        this.streamUrl = conversation.streamUrl;
-                        this.referenceGrammarId = conversation.referenceGrammarId;
-                        if (!this.secret)
-                            this.refreshTokenLoop();
+                        // if token and streamUrl are defined it means reconnect has already been done. Skipping it.
+                        if (this.token && this.streamUrl) {
+                            this.connectionStatus$.next(ConnectionStatus.Online);
+                            return scheduled([connectionStatus], this.services.scheduler);
+                        } else {
+                            return this.startConversation()
+                                .pipe(
+                                    tap(conversation => {
+                                        this.conversationId = conversation.conversationId;
+                                        this.token = this.secret || conversation.token;
+                                        this.streamUrl = conversation.streamUrl;
+                                        this.referenceGrammarId = conversation.referenceGrammarId;
+                                        if (!this.secret)
+                                            this.refreshTokenLoop();
 
-                        this.connectionStatus$.next(ConnectionStatus.Online);
-                    }, error => {
-                        this.connectionStatus$.next(ConnectionStatus.FailedToConnect);
-                    })
-                    .map(_ => connectionStatus);
-                }
-            }
-            else {
-                return Observable.of(connectionStatus, this.services.scheduler);
-            }
-        })
-        .filter(connectionStatus => connectionStatus != ConnectionStatus.Uninitialized && connectionStatus != ConnectionStatus.Connecting)
-        .flatMap(connectionStatus => {
-            switch (connectionStatus) {
-                case ConnectionStatus.Ended:
-                    return Observable.throw(errorConversationEnded, this.services.scheduler);
+                                        this.connectionStatus$.next(ConnectionStatus.Online);
+                                    }, error => {
+                                        this.connectionStatus$.next(ConnectionStatus.FailedToConnect);
+                                    }),
+                                    map(_ => connectionStatus)
+                                );
+                        }
+                    } else {
+                        return scheduled([connectionStatus], this.services.scheduler);
+                    }
+                }),
+                filter(connectionStatus =>
+                    connectionStatus != ConnectionStatus.Uninitialized &&
+                    connectionStatus != ConnectionStatus.Connecting
+                ),
+                mergeMap(connectionStatus => {
+                    switch (connectionStatus) {
+                        case ConnectionStatus.Ended:
+                            return throwError(errorConversationEnded, this.services.scheduler);
 
-                case ConnectionStatus.FailedToConnect:
-                    return Observable.throw(errorFailedToConnect, this.services.scheduler);
+                        case ConnectionStatus.FailedToConnect:
+                            return throwError(errorFailedToConnect, this.services.scheduler);
 
-                case ConnectionStatus.ExpiredToken:
-                    return Observable.of(connectionStatus, this.services.scheduler);
+                        case ConnectionStatus.ExpiredToken:
+                            return scheduled([connectionStatus], this.services.scheduler);
 
-                default:
-                    return Observable.of(connectionStatus, this.services.scheduler);
-            }
-        })
-
-        return once ? obs.take(1) : obs;
+                        default:
+                            return scheduled([connectionStatus], this.services.scheduler);
+                    }
+                })
+            )
+        return once ? obs.pipe(take(1)) : obs;
     }
 
     setConnectionStatusFallback(
@@ -624,7 +277,7 @@ export class DirectLine implements IBotConnection {
     }
 
     private startConversation() {
-        //if conversationid is set here, it means we need to call the reconnect api, else it is a new conversation
+        // if conversationid is set here, it means we need to call the reconnect api, else it is a new conversation
         const url = this.conversationId
             ? `${this.domain}/conversations/${this.conversationId}?watermark=${this.watermark}`
             : `${this.domain}/conversations`;
@@ -637,6 +290,7 @@ export class DirectLine implements IBotConnection {
                 },
                 locale: this.localeOnStartConversation
               };
+
         return this.services.ajax({
             method,
             url,
@@ -648,59 +302,69 @@ export class DirectLine implements IBotConnection {
                 ...this.commonHeaders()
             }
         })
-//      .do(ajaxResponse => konsole.log("conversation ajaxResponse", ajaxResponse.response))
-        .map(ajaxResponse => ajaxResponse.response as Conversation)
-        .retryWhen(error$ =>
-            // for now we deem 4xx and 5xx errors as unrecoverable
-            // for everything else (timeouts), retry for a while
-            error$.mergeMap((error) => {
-                return error.status >= 400 && error.status < 600
-                ? Observable.throw(error, this.services.scheduler)
-                : Observable.of(error, this.services.scheduler)
-            })
-            .delay(this.timeout, this.services.scheduler)
-            .take(this.retries)
+        .pipe(
+            map(ajaxResponse => ajaxResponse.response as Conversation),
+            retryWhen(error$ =>
+                // for now we deem 4xx and 5xx errors as unrecoverable
+                // for everything else (timeouts), retry for a while
+                error$
+                    .pipe(
+                        mergeMap(error => error.status >= 400 && error.status < 600
+                            ? throwError([error], this.services.scheduler)
+                            : scheduled([error], this.services.scheduler)
+                        ),
+                        delay(this.timeout, this.services.scheduler),
+                        take(this.retries)
+                    )
+            )
         )
     }
 
     private refreshTokenLoop() {
-        this.tokenRefreshSubscription = Observable.interval(intervalRefreshToken, this.services.scheduler)
-        .flatMap(_ => this.refreshToken())
-        .subscribe(token => {
-            konsole.log("refreshing token", token, "at", new Date());
-            this.token = token;
-        });
+        this.tokenRefreshSubscription = interval(intervalRefreshToken, this.services.scheduler)
+            .pipe(
+                mergeMap(_ => this.refreshToken())
+            )
+            .subscribe((token) => {
+                konsole.log("refreshing token", token, "at", new Date());
+                this.token = token;
+            });
     }
 
     private refreshToken() {
         return this.checkConnection(true)
-        .flatMap(_ =>
-            this.services.ajax({
-                method: "POST",
-                url: `${this.domain}/tokens/refresh`,
-                timeout: this.timeout,
-                headers: {
-                    ...this.commonHeaders()
-                }
-            })
-            .map(ajaxResponse => ajaxResponse.response.token as string)
-            .retryWhen(error$ => error$
-                .mergeMap(error => {
-                    if (error.status === 403) {
-                        // if the token is expired there's no reason to keep trying
-                        this.expiredToken();
-                        return Observable.throw(error, this.services.scheduler);
-                    } else if (error.status === 404) {
-                        // If the bot is gone, we should stop retrying
-                        return Observable.throw(error, this.services.scheduler);
-                    }
+            .pipe(
+                mergeMap(_ =>
+                    this.services.ajax({
+                        method: "POST",
+                        url: `${this.domain}/tokens/refresh`,
+                        timeout: this.timeout,
+                        headers: {
+                            ...this.commonHeaders()
+                        }
+                    })
+                    .pipe(
+                        map((ajaxResponse: any) => ajaxResponse.response.token as string),
+                        retryWhen(error$ => error$
+                            .pipe(
+                                mergeMap(error => {
+                                    if (error.status === 403) {
+                                        // if the token is expired there's no reason to keep trying
+                                        this.expiredToken();
+                                        return throwError(error, this.services.scheduler);
+                                    } else if (error.status === 404) {
+                                        throwError(error, this.services.scheduler);
+                                    }
 
-                    return Observable.of(error, this.services.scheduler);
-                })
-                .delay(this.timeout, this.services.scheduler)
-                .take(this.retries)
-            )
-        )
+                                    return scheduled([error], this.services.scheduler);
+                                }),
+                                delay(this.timeout, this.services.scheduler),
+                                take(this.retries)
+                            )
+                        )
+                    )
+                )
+            );
     }
 
     public reconnect(conversation: Conversation) {
@@ -727,30 +391,34 @@ export class DirectLine implements IBotConnection {
         // Will throw an error if we are not connected
         konsole.log("getSessionId");
         return this.checkConnection(true)
-            .flatMap(_ =>
-                this.services.ajax({
-                    method: "GET",
-                    url: `${this.domain}/session/getsessionid`,
-                    withCredentials: true,
-                    timeout: this.timeout,
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...this.commonHeaders()
-                    }
-                })
-                .map(ajaxResponse => {
-                    if (ajaxResponse && ajaxResponse.response && ajaxResponse.response.sessionId) {
-                        konsole.log("getSessionId response: " + ajaxResponse.response.sessionId);
-                        return ajaxResponse.response.sessionId as string;
-                    }
-                    return '';
-                })
-                .catch(error => {
-                    konsole.log("getSessionId error: " + error.status);
-                    return Observable.of('', this.services.scheduler);
-                })
-            )
-            .catch(error => this.catchExpiredToken(error));
+            .pipe(
+                mergeMap(_ =>
+                    this.services.ajax({
+                        method: "GET",
+                        url: `${this.domain}/session/getsessionid`,
+                        withCredentials: true,
+                        timeout: this.timeout,
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...this.commonHeaders()
+                        }
+                    })
+                    .pipe(
+                        map((ajaxResponse: any) => {
+                            if (ajaxResponse && ajaxResponse.response && ajaxResponse.response.sessionId) {
+                                konsole.log("getSessionId response: " + ajaxResponse.response.sessionId);
+                                return ajaxResponse.response.sessionId as string;
+                            }
+                            return '';
+                        }),
+                        catchError((error: any) => {
+                            konsole.log("getSessionId error: " + error.status);
+                            return scheduled([], this.services.scheduler);
+                        })
+                    )
+                ),
+                catchError(error => this.catchExpiredToken(error))
+            );
     }
 
     postActivity(activity: Activity) {
@@ -769,21 +437,25 @@ export class DirectLine implements IBotConnection {
         // Will throw an error if we are not connected
         konsole.log("postActivity", activity);
         return this.checkConnection(true)
-        .flatMap(_ =>
-            this.services.ajax({
-                method: "POST",
-                url: `${this.domain}/conversations/${this.conversationId}/activities`,
-                body: activity,
-                timeout: this.timeout,
-                headers: {
-                    "Content-Type": "application/json",
-                    ...this.commonHeaders()
-                },
-            })
-            .map(ajaxResponse => ajaxResponse.response.id as string)
-            .catch(error => this.catchPostError(error))
-        )
-        .catch(error => this.catchExpiredToken(error));
+            .pipe(
+                mergeMap(_ =>
+                    this.services.ajax({
+                        method: "POST",
+                        url: `${this.domain}/conversations/${this.conversationId}/activities`,
+                        body: activity,
+                        timeout: this.timeout,
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...this.commonHeaders()
+                        }
+                    })
+                    .pipe(
+                        map((ajaxResponse: any) => ajaxResponse.response.id as string),
+                        catchError((error: AjaxResponse) => this.catchPostError(error))
+                    )
+                ),
+                catchError(error => this.catchExpiredToken(error))
+            );
     }
 
     private postMessageWithAttachments(message: Message) {
@@ -800,63 +472,71 @@ export class DirectLine implements IBotConnection {
         // If we're not connected to the bot, get connected
         // Will throw an error if we are not connected
         return this.checkConnection(true)
-        .flatMap(_ => {
-            // To send this message to DirectLine we need to deconstruct it into a "template" activity
-            // and one blob for each attachment.
-            formData = new FormData();
-            formData.append('activity', new Blob([JSON.stringify({
-                ...message,
-                // Removing contentUrl from attachment, we will send it via multipart
-                attachments: cleansedAttachments.map(({ contentUrl: string, ...others }) => ({ ...others }))
-            })], { type: 'application/vnd.microsoft.activity' }));
+            .pipe(
+                mergeMap(_ => {
+                    // To send this message to DirectLine we need to deconstruct it into a "template" activity
+                    // and one blob for each attachment.
+                    formData = new FormData();
+                    formData.append('activity', new Blob([JSON.stringify({
+                        ...message,
+                        // Removing contentUrl from attachment, we will send it via multipart
+                        attachments: cleansedAttachments.map(({ contentUrl: string, ...others }) => ({ ...others }))
+                    })], { type: 'application/vnd.microsoft.activity' }));
 
-            return Observable.from(cleansedAttachments, this.services.scheduler)
-            .flatMap((media: Media) =>
-                this.services.ajax({
-                    method: "GET",
-                    url: media.contentUrl,
-                    responseType: 'arraybuffer'
-                })
-                .do(ajaxResponse =>
-                    formData.append('file', new Blob([ajaxResponse.response], { type: media.contentType }), media.name)
-                )
-            )
-            .count()
-        })
-        .flatMap(_ =>
-            this.services.ajax({
-                method: "POST",
-                url: `${this.domain}/conversations/${this.conversationId}/upload?userId=${message.from.id}`,
-                body: formData,
-                timeout: this.timeout,
-                headers: {
-                    ...this.commonHeaders()
-                }
-            })
-            .map(ajaxResponse => ajaxResponse.response.id as string)
-            .catch(error => this.catchPostError(error))
-        )
-        .catch(error => this.catchPostError(error));
+                    return scheduled(cleansedAttachments, this.services.scheduler)
+                        .pipe(
+                            mergeMap((media: Media) =>
+                                ajax({
+                                    method: "GET",
+                                    url: media.contentUrl,
+                                    responseType: 'arraybuffer'
+                                })
+                                .pipe(
+                                    tap(ajaxResponse =>
+                                        formData.append('file', new Blob([ajaxResponse.response], { type: media.contentType }), media.name)
+                                    )
+                                )
+                            ),
+                            count()
+                        )
+                }),
+                mergeMap(_ =>
+                    this.services.ajax({
+                        method: "POST",
+                        url: `${this.domain}/conversations/${this.conversationId}/upload?userId=${message.from.id}`,
+                        body: formData,
+                        timeout: this.timeout,
+                        headers: {
+                            ...this.commonHeaders()
+                        }
+                    })
+                    .pipe(
+                        map(ajaxResponse => ajaxResponse.response.id as string),
+                        catchError(error => this.catchPostError(error))
+                    )
+                ),
+                catchError(error => this.catchPostError(error))
+            );
     }
 
-    private catchPostError(error: any) {
+    private catchPostError(error: AjaxResponse) {
         if (error.status === 403)
             // token has expired (will fall through to return "retry")
             this.expiredToken();
         else if (error.status >= 400 && error.status < 500)
             // more unrecoverable errors
-            return Observable.throw(error, this.services.scheduler);
-        return Observable.of("retry", this.services.scheduler);
+            return throwError(error, this.services.scheduler);
+        return scheduled(["retry"], this.services.scheduler);
     }
 
     private catchExpiredToken(error: any) {
         return error === errorExpiredToken
-        ? Observable.of("retry", this.services.scheduler)
-        : Observable.throw(error, this.services.scheduler);
+        ? scheduled(["retry"], this.services.scheduler)
+        : throwError(error, this.services.scheduler);
     }
 
     private pollingGetActivity$() {
-        const poller$: Observable<AjaxResponse> = Observable.create((subscriber: Subscriber<any>) => {
+        const poller$: Observable<AjaxResponse> = new Observable((subscriber: Subscriber<any>) => {
             // A BehaviorSubject to trigger polling. Since it is a BehaviorSubject
             // the first event is produced immediately.
             const trigger$ = new BehaviorSubject<any>({});
@@ -903,28 +583,41 @@ export class DirectLine implements IBotConnection {
         });
 
         return this.checkConnection()
-        .flatMap(_ => poller$
-            .catch(() => Observable.empty<AjaxResponse>())
-            .map(ajaxResponse => ajaxResponse.response as ActivityGroup)
-            .flatMap(activityGroup => this.observableFromActivityGroup(activityGroup)));
+            .pipe(
+                mergeMap(_ =>
+                    poller$
+                        .pipe(
+                            catchError(() => EMPTY),
+                            map(ajaxResponse => ajaxResponse.response as ActivityGroup),
+                            mergeMap(activityGroup => this.observableFromActivityGroup(activityGroup))
+                        )
+                )
+            );
     }
 
     private observableFromActivityGroup(activityGroup: ActivityGroup) {
         if (activityGroup.watermark)
             this.watermark = activityGroup.watermark;
-        return Observable.from(activityGroup.activities, this.services.scheduler);
+        return scheduled(activityGroup.activities, this.services.scheduler);
     }
 
     private webSocketActivity$(): Observable<Activity> {
         return this.checkConnection()
-        .flatMap(_ =>
-            this.observableWebSocket<ActivityGroup>()
-            // WebSockets can be closed by the server or the browser. In the former case we need to
-            // retrieve a new streamUrl. In the latter case we could first retry with the current streamUrl,
-            // but it's simpler just to always fetch a new one.
-            .retryWhen(error$ => error$.delay(this.getRetryDelay(), this.services.scheduler).mergeMap(error => this.reconnectToConversation()))
-        )
-        .flatMap(activityGroup => this.observableFromActivityGroup(activityGroup))
+            .pipe(
+                mergeMap(_ =>
+                    this.observableWebSocket<ActivityGroup>()
+                    // WebSockets can be closed by the server or the browser. In the former case we need to
+                    // retrieve a new streamUrl. In the latter case we could first retry with the current streamUrl,
+                    // but it's simpler just to always fetch a new one.
+                    .pipe(
+                        retryWhen(error$ => error$.pipe(
+                            delay(this.getRetryDelay(), this.services.scheduler),
+                            mergeMap(error => this.reconnectToConversation()
+                        )))
+                    )
+                ),
+                mergeMap((activityGroup: ActivityGroup) => this.observableFromActivityGroup(activityGroup))
+            );
     }
 
     // Returns the delay duration in milliseconds
@@ -932,11 +625,11 @@ export class DirectLine implements IBotConnection {
         return Math.floor(3000 + this.services.random() * 12000);
     }
 
-    // Originally we used Observable.webSocket, but it's fairly opinionated and I ended up writing
+    // Originally we used Observable.webSocket, but it's fairly opinionated  and I ended up writing
     // a lot of code to work around their implementation details. Since WebChat is meant to be a reference
     // implementation, I decided roll the below, where the logic is more purposeful. - @billba
     private observableWebSocket<T>() {
-        return Observable.create((subscriber: Subscriber<T>) => {
+        return new Observable((subscriber: Subscriber<T>) => {
             konsole.log("creating WebSocket", this.streamUrl);
             const ws = new this.services.WebSocket(this.streamUrl);
             let sub: Subscription;
@@ -948,10 +641,10 @@ export class DirectLine implements IBotConnection {
                 // If we periodically ping the server with empty messages, it helps Chrome
                 // realize when connection breaks, and close the socket. We then throw an
                 // error, and that give us the opportunity to attempt to reconnect.
-                sub = Observable.interval(this.timeout, this.services.scheduler).subscribe(_ => {
+                sub = interval(this.timeout, this.services.scheduler).subscribe(_ => {
                     try {
-                        ws.send("")
-                    } catch(e) {
+                        ws.send("");
+                    } catch (e) {
                         konsole.log("Ping error", e);
                     }
                 });
@@ -991,38 +684,44 @@ export class DirectLine implements IBotConnection {
 
     private reconnectToConversation() {
         return this.checkConnection(true)
-        .flatMap(_ =>
-            this.services.ajax({
-                method: "GET",
-                url: `${this.domain}/conversations/${this.conversationId}?watermark=${this.watermark}`,
-                timeout: this.timeout,
-                headers: {
-                    "Accept": "application/json",
-                    ...this.commonHeaders()
-                }
-            })
-            .do(result => {
-                if (!this.secret)
-                    this.token = result.response.token;
-                this.streamUrl = result.response.streamUrl;
-            })
-            .map(_ => null)
-            .retryWhen(error$ => error$
-                .mergeMap(error => {
-                    if (error.status === 403) {
-                        // token has expired. We can't recover from this here, but the embedding
-                        // website might eventually call reconnect() with a new token and streamUrl.
-                        this.expiredToken();
-                    } else if (error.status === 404) {
-                        return Observable.throw(errorConversationEnded, this.services.scheduler);
-                    }
+            .pipe(
+                mergeMap(_ =>
+                    this.services.ajax({
+                        method: "GET",
+                        url: `${this.domain}/conversations/${this.conversationId}?watermark=${this.watermark}`,
+                        timeout: this.timeout,
+                        headers: {
+                            "Accept": "application/json",
+                            ...this.commonHeaders()
+                        }
+                    })
+                    .pipe(
+                        tap((result: any) => {
+                            if (!this.secret)
+                                this.token = result.response.token;
+                            this.streamUrl = result.response.streamUrl;
+                        }),
+                        map(() => null),
+                        retryWhen(error$ => error$
+                            .pipe(
+                                mergeMap(error => {
+                                    if (error.status === 403) {
+                                        // token has expired. We can't recover from this here, but the embedding
+                                        // website might eventually call reconnect() with a new token and streamUrl.
+                                        this.expiredToken();
+                                    } else if (error.status === 404) {
+                                        throwError(errorConversationEnded, this.services.scheduler);
+                                    }
 
-                    return Observable.of(error, this.services.scheduler);
-                })
-                .delay(this.timeout, this.services.scheduler)
-                .take(this.retries)
+                                    return scheduled([error], this.services.scheduler);
+                                }),
+                                delay(this.timeout, this.services.scheduler),
+                                take(this.retries)
+                            )
+                        )
+                    )
+                )
             )
-        )
     }
 
     private commonHeaders() {
@@ -1039,7 +738,8 @@ export class DirectLine implements IBotConnection {
             clientAgent += `; ${customAgent}`
         }
 
-        return `${DIRECT_LINE_VERSION} (${clientAgent} ${process.env.npm_package_version})`;
+        const packageVersion = process.env.npm_package_version;
+        return `${DIRECT_LINE_VERSION} (${clientAgent} ${packageVersion})`;
     }
 
     setUserId(userId: string) {

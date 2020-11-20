@@ -1,8 +1,11 @@
 import * as DirectLineExport from "./directLine";
 import * as DirectLineMock from './directLine.mock';
-import { TestScheduler, Observable, Subscription, AjaxResponse } from "rxjs";
 // @ts-ignore
 import { version } from "../package.json";
+import { Observable, Subscription, timer, EMPTY } from "rxjs";
+import { TestScheduler } from "rxjs/testing";
+import { AjaxResponse } from "rxjs/ajax";
+import { catchError, observeOn } from "rxjs/operators";
 
 declare var process: {
     arch: string;
@@ -78,16 +81,14 @@ describe('MockSuite', () => {
                     const result = iterator.next();
                     if (result.done === true) {
                         subscriber.complete();
-                    }
-                    else {
+                    } else {
                         inner = result.value.subscribe(
                             value => subscriber.next(value),
                             error => subscriber.error(error),
                             pump
                         );
                     }
-                }
-                catch (error) {
+                } catch (error) {
                     subscriber.error(error);
                 }
             };
@@ -132,14 +133,14 @@ describe('MockSuite', () => {
         // arrange
 
         const scenario = function* (): IterableIterator<Observable<unknown>> {
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
             yield directline.postActivity(expected.x);
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
             yield directline.postActivity(expected.y);
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
         };
 
-        subscriptions.push(lazyConcat(scenario()).observeOn(scheduler).subscribe());
+        subscriptions.push(lazyConcat(scenario()).pipe(observeOn(scheduler)).subscribe());
 
         const actual: Array<DirectLineExport.Activity> = [];
         subscriptions.push(directline.activity$.subscribe(a => actual.push(a)));
@@ -157,15 +158,15 @@ describe('MockSuite', () => {
         // arrange
 
         const scenario = function* (): IterableIterator<Observable<unknown>> {
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
             yield directline.postActivity(expected.x);
             DirectLineMock.injectClose(server);
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
             yield directline.postActivity(expected.y);
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
         };
 
-        subscriptions.push(lazyConcat(scenario()).observeOn(scheduler).subscribe());
+        subscriptions.push(lazyConcat(scenario()).pipe(observeOn(scheduler)).subscribe());
 
         const actual: Array<DirectLineExport.Activity> = [];
         subscriptions.push(directline.activity$.subscribe(a => actual.push(a)));
@@ -182,7 +183,7 @@ describe('MockSuite', () => {
     test('BotAgentWithMocks', () => {
         const expected: string = `DirectLine/3.0 (directlinejs ${version})`;
 
-        //@ts-ignore
+        // @ts-ignore
         const actual: string = directline.commonHeaders()["x-ms-bot-agent"];
         expect(actual).toStrictEqual(expected)
     });
@@ -190,21 +191,20 @@ describe('MockSuite', () => {
     test('RetryAfterHeader', () => {
         services.ajax = DirectLineMock.mockAjax(server, (urlOrRequest) => {
 
-            if(typeof urlOrRequest === 'string'){
+            if (typeof urlOrRequest === 'string') {
                 throw new Error();
             }
 
-            if(urlOrRequest.url && urlOrRequest.url.indexOf(server.conversation.conversationId)>0){
+            if (urlOrRequest.url && urlOrRequest.url.indexOf(server.conversation.conversationId) > 0) {
                  const response: Partial<AjaxResponse> = {
                     status: 429,
-                    xhr:{
+                    xhr: {
                         getResponseHeader: (name) => "10"
                     } as XMLHttpRequest
                 };
                 const error = new Error('Ajax Error');
                 throw Object.assign(error, response);
-            }
-            else if(urlOrRequest.url && urlOrRequest.url.indexOf('/conversations') > 0){
+            } else if (urlOrRequest.url && urlOrRequest.url.indexOf('/conversations') > 0) {
                 // start conversation
                 const response: Partial<AjaxResponse> = {
                     response: server.conversation,
@@ -222,20 +222,22 @@ describe('MockSuite', () => {
         let startTime: number;
         let endTime: number;
         const scenario = function* (): IterableIterator<Observable<unknown>> {
-            yield Observable.timer(200, scheduler);
+            yield timer(200, scheduler);
             startTime = scheduler.now();
             yield directline.postActivity(expected.x);
         };
 
         let actualError: Error;
-        try{
-        subscriptions.push(lazyConcat(scenario()).observeOn(scheduler).subscribe());
+        subscriptions.push(lazyConcat(scenario())
+            .pipe(
+                observeOn(scheduler),
+                catchError(error => {
+                    actualError = error;
+                    endTime = scheduler.now();
+                    return EMPTY;
+                })
+            ).subscribe());
         scheduler.flush();
-        }
-        catch(error){
-            actualError = error;
-            endTime = scheduler.now();
-        }
         expect(actualError.message).toStrictEqual('Ajax Error');
         // @ts-ignore
         expect(actualError.status).toStrictEqual(429);

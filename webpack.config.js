@@ -1,6 +1,6 @@
 const { DefinePlugin } = require('webpack');
 const { join } = require('path');
-const Visualizer = require('webpack-visualizer-plugin');
+const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 module.exports = {
   entry: {
@@ -20,6 +20,8 @@ module.exports = {
         'VERSION': JSON.stringify(process.env.npm_package_version)
       }
     }),
-    new Visualizer()
+    new BundleAnalyzerPlugin({
+      analyzerMode: 'static'
+    })
   ]
 };
