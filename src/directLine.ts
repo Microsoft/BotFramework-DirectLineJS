@@ -389,7 +389,7 @@ const wrapAjaxWithRetry = (source: AjaxCreationMethod, scheduler: IScheduler): A
     const inner = (response$ : Observable<AjaxResponse>) => {
         return response$
         .catch<AjaxResponse, AjaxResponse>((err) => {
-            if(err.status === 429){
+            if(err.status === 429 || err.status === 503){
                 const retryAfterValue = err.xhr.getResponseHeader('Retry-After');
                 const retryAfter = Number(retryAfterValue);
                 if(!isNaN(retryAfter)){
