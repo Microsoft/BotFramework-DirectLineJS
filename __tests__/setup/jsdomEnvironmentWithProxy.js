@@ -2,7 +2,7 @@ require('global-agent/bootstrap');
 
 // To use proxy, SET GLOBAL_AGENT_HTTP_PROXY=http://localhost:8888
 
-const JSDOMEnvironment = require('jest-environment-jsdom-fourteen');
+const JSDOMEnvironment = require('jest-environment-jsdom');
 
 class JSDOMEnvironmentWithProxy extends JSDOMEnvironment {
   setup() {

@@ -1,7 +1,9 @@
-import * as DirectLineExport from "./directLine";
-import { TestScheduler, Observable } from "rxjs";
-import { AjaxCreationMethod, AjaxRequest, AjaxResponse } from "rxjs/observable/dom/AjaxObservable";
+import * as DirectLineExport from './directLine';
+import { Observable } from 'rxjs';
+import { TestScheduler } from 'rxjs/testing';
 import { URL, URLSearchParams } from 'url';
+import { AjaxRequest, AjaxResponse } from 'rxjs/ajax';
+import { AjaxCreationMethod } from 'rxjs/internal/observable/dom/AjaxObservable';
 
 // MOCK helpers
 
@@ -148,8 +150,7 @@ export const mockAjax = (server: Server, customAjax?: ajaxType): AjaxCreationMet
       }
 
       return response as AjaxResponse;
-    }
-    else if (parts.length === 5) {
+    } else if (parts.length === 5) {
       const responseToken = tokenResponse(server, urlOrRequest);
       if (responseToken !== null) {
         return responseToken;
@@ -179,8 +180,7 @@ export const mockAjax = (server: Server, customAjax?: ajaxType): AjaxCreationMet
       try {
         subscriber.next(jax(urlOrRequest));
         subscriber.complete();
-      }
-      catch (error) {
+      } catch (error) {
         subscriber.error(error);
       }
     });

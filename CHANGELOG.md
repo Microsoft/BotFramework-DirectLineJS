@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+- Update DirectLine to rxjs v6 pipeable operators, PR [#102](https://github.com/microsoft/BotFramework-DirectLineJS/pull/102/files)
+
 ## [0.14.1] - 2021-02-10
 
 ### Changed
